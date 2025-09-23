@@ -2,90 +2,18 @@
 
 import React, { useState, useEffect } from 'react';
 import { Users, Mail, Send, Plus, Edit, Trash2, UserCheck, UserX, Clock, FileText, Wand2, Globe, Upload, Download } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const OutreachSystem = () => {
-  // Sample data - in real app this would come from a backend
-  const [contacts, setContacts] = useState([
-    {
-      id: 1,
-      name: 'John Smith',
-      email: 'john@company.com',
-      company: 'Tech Corp',
-      status: 'email_sent',
-      lastContacted: '2024-01-15',
-      notes: 'Interested in our solution',
-      group: 'investors'
-    },
-    {
-      id: 2,
-      name: 'Sarah Johnson',
-      email: 'sarah@startup.io',
-      company: 'Startup Inc',
-      status: 'replied',
-      lastContacted: '2024-01-14',
-      notes: 'Wants to schedule a demo',
-      group: 'collabs'
-    },
-    {
-      id: 3,
-      name: 'Mike Davis',
-      email: 'mike@enterprise.com',
-      company: 'Enterprise Ltd',
-      status: 'follow_up_needed',
-      lastContacted: '2024-01-10',
-      notes: 'No response to first email',
-      group: 'prospects'
-    },
-    {
-      id: 4,
-      name: 'Lisa Chen',
-      email: 'lisa@bigcorp.com',
-      company: 'Big Corp',
-      status: 'not_contacted',
-      lastContacted: null,
-      notes: 'New lead from LinkedIn',
-      group: 'investors'
-    },
-    {
-      id: 5,
-      name: 'Robert Brown',
-      email: 'robert@oldcompany.com',
-      company: 'Old Company',
-      status: 'no_response',
-      lastContacted: '2024-01-05',
-      notes: 'Multiple attempts made',
-      group: 'cold_leads'
-    }
-  ]);
-
-  const [customGroups, setCustomGroups] = useState([
-    { id: 'investors', label: 'Investors', color: 'bg-purple-100 text-purple-800' },
-    { id: 'collabs', label: 'Collaborators', color: 'bg-green-100 text-green-800' },
-    { id: 'prospects', label: 'Prospects', color: 'bg-blue-100 text-blue-800' },
-    { id: 'cold_leads', label: 'Cold Leads', color: 'bg-gray-100 text-gray-800' },
-    { id: 'customers', label: 'Customers', color: 'bg-yellow-100 text-yellow-800' }
-  ]);
-
-  const [emailTemplates, setEmailTemplates] = useState([
-    {
-      id: 1,
-      name: 'Investor Pitch',
-      subject: 'Investment opportunity at {{company}}',
-      body: 'Hi {{name}},\n\nI hope this email finds you well. I wanted to reach out because I believe {{company}} represents an exciting investment opportunity that aligns with your portfolio.\n\nWe are revolutionizing the industry with our innovative approach...\n\nWould you be interested in a brief call to discuss this opportunity?\n\nBest regards',
-      group: 'investors',
-      language: 'en',
-      createdAt: '2024-01-10'
-    },
-    {
-      id: 2,
-      name: 'Collaboration Proposal',
-      subject: 'Partnership opportunity with {{company}}',
-      body: 'Hello {{name}},\n\nI came across {{company}} and was impressed by your work in the industry.\n\nI believe there could be great synergy between our companies and wanted to explore potential collaboration opportunities.\n\nWould you be open to a discussion?\n\nBest regards',
-      group: 'collabs',
-      language: 'en',
-      createdAt: '2024-01-12'
-    }
-  ]);
+  const [contacts, setContacts] = useState([]);
+  const [customGroups, setCustomGroups] = useState([]);
+  const [emailTemplates, setEmailTemplates] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   const [activeTab, setActiveTab] = useState('all');
   const [showNewContactForm, setShowNewContactForm] = useState(false);
@@ -112,7 +40,7 @@ const OutreachSystem = () => {
     company: '',
     status: 'not_contacted',
     notes: '',
-    group: 'prospects'
+    group_id: 'prospects'
   });
 
   const [newGroup, setNewGroup] = useState({
@@ -121,13 +49,13 @@ const OutreachSystem = () => {
   });
 
   const [newTemplate, setNewTemplate] = useState({
-    id: null as number | null,
+    id: null,
     name: '',
     subject: '',
     body: '',
-    group: 'prospects',
+    group_id: 'prospects',
     language: 'en',
-    createdAt: null as string | null
+    created_at: null
   });
 
   const [aiTemplateGenerator, setAiTemplateGenerator] = useState({
@@ -147,6 +75,28 @@ const OutreachSystem = () => {
     selectedContacts: []
   });
 
+  // Fetch initial data from Supabase
+  useEffect(() => {
+    const fetchInitialData = async () => {
+      setLoading(true);
+      const { data: contactsData, error: contactsError } = await supabase.from('contacts').select('*');
+      const { data: groupsData, error: groupsError } = await supabase.from('groups').select('*');
+      const { data: templatesData, error: templatesError } = await supabase.from('email_templates').select('*');
+
+      if (contactsError) console.error('Error fetching contacts:', contactsError);
+      if (groupsError) console.error('Error fetching groups:', groupsError);
+      if (templatesError) console.error('Error fetching templates:', templatesError);
+
+      setContacts(contactsData || []);
+      setCustomGroups(groupsData || []);
+      setEmailTemplates(templatesData || []);
+      setLoading(false);
+    };
+
+    fetchInitialData();
+  }, []);
+
+  // Handle outside clicks for export dropdown
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (showExportDropdown && !event.target.closest('.relative')) {
@@ -229,7 +179,7 @@ const OutreachSystem = () => {
     
     // Filter by group
     if (selectedGroupFilter !== 'all') {
-      filtered = filtered.filter(c => c.group === selectedGroupFilter);
+      filtered = filtered.filter(c => c.group_id === selectedGroupFilter);
     }
     
     return filtered;
@@ -239,82 +189,121 @@ const OutreachSystem = () => {
     if (selectedGroupFilter === 'all') {
       return emailTemplates;
     }
-    return emailTemplates.filter(t => t.group === selectedGroupFilter);
+    return emailTemplates.filter(t => t.group_id === selectedGroupFilter);
   };
 
-  const updateContactStatus = (contactId, newStatus) => {
-    setContacts(prev => prev.map(contact => 
-      contact.id === contactId 
-        ? { ...contact, status: newStatus, lastContacted: newStatus !== 'not_contacted' ? new Date().toISOString().split('T')[0] : contact.lastContacted }
-        : contact
-    ));
+  const updateContactStatus = async (contactId, newStatus) => {
+    const { data, error } = await supabase
+      .from('contacts')
+      .update({ status: newStatus, last_contacted: newStatus !== 'not_contacted' ? new Date().toISOString().split('T')[0] : null })
+      .eq('id', contactId)
+      .select();
+    
+    if (error) {
+      console.error('Error updating contact status:', error);
+    } else {
+      setContacts(prev => prev.map(c => (c.id === contactId ? data[0] : c)));
+    }
   };
 
-  const updateContactGroup = (contactId, newGroup) => {
-    setContacts(prev => prev.map(contact => 
-      contact.id === contactId ? { ...contact, group: newGroup } : contact
-    ));
+  const updateContactGroup = async (contactId, newGroupId) => {
+    const { data, error } = await supabase
+      .from('contacts')
+      .update({ group_id: newGroupId })
+      .eq('id', contactId)
+      .select();
+    
+    if (error) {
+      console.error('Error updating contact group:', error);
+    } else {
+      setContacts(prev => prev.map(c => (c.id === contactId ? data[0] : c)));
+    }
   };
 
-  const addNewContact = () => {
+  const addNewContact = async () => {
     if (newContact.name && newContact.email) {
-      const contact = {
-        ...newContact,
-        id: Math.max(...contacts.map(c => c.id)) + 1,
-        lastContacted: null
-      };
-      setContacts(prev => [...prev, contact]);
-      setNewContact({
-        name: '',
-        email: '',
-        company: '',
-        status: 'not_contacted',
-        notes: '',
-        group: 'prospects'
-      });
-      setShowNewContactForm(false);
+      const { data, error } = await supabase
+        .from('contacts')
+        .insert([{ ...newContact }])
+        .select();
+
+      if (error) {
+        console.error('Error adding new contact:', error);
+      } else {
+        setContacts(prev => [...prev, data[0]]);
+        setNewContact({
+          name: '',
+          email: '',
+          company: '',
+          status: 'not_contacted',
+          notes: '',
+          group_id: 'prospects'
+        });
+        setShowNewContactForm(false);
+      }
     }
   };
 
-  const addNewGroup = () => {
+  const addNewGroup = async () => {
     if (newGroup.label.trim()) {
-      const group = {
-        id: newGroup.label.toLowerCase().replace(/\s+/g, '_'),
-        label: newGroup.label,
-        color: newGroup.color
-      };
-      setCustomGroups(prev => [...prev, group]);
-      setNewGroup({ label: '', color: 'bg-blue-100 text-blue-800' });
-      setShowNewGroupForm(false);
+      const group_id = newGroup.label.toLowerCase().replace(/\s+/g, '_');
+      const { data, error } = await supabase
+        .from('groups')
+        .insert([{ id: group_id, label: newGroup.label, color: newGroup.color }])
+        .select();
+
+      if (error) {
+        console.error('Error adding new group:', error);
+      } else {
+        setCustomGroups(prev => [...prev, data[0]]);
+        setNewGroup({ label: '', color: 'bg-blue-100 text-blue-800' });
+        setShowNewGroupForm(false);
+      }
     }
   };
 
-  const addNewTemplate = () => {
+  const addNewTemplate = async () => {
     if (newTemplate.name && newTemplate.subject && newTemplate.body) {
-      const template = {
+      const templateToSave = {
         ...newTemplate,
-        id: newTemplate.id || Math.max(...emailTemplates.map(t => t.id)) + 1,
-        createdAt: newTemplate.createdAt || new Date().toISOString().split('T')[0]
+        created_at: newTemplate.created_at || new Date().toISOString().split('T')[0]
       };
-      
+      let result;
       if (newTemplate.id) {
         // Update existing template
-        setEmailTemplates(prev => prev.map(t => t.id === newTemplate.id ? template : t));
+        result = await supabase
+          .from('email_templates')
+          .update(templateToSave)
+          .eq('id', newTemplate.id)
+          .select();
       } else {
         // Add new template
-        setEmailTemplates(prev => [...prev, template]);
+        result = await supabase
+          .from('email_templates')
+          .insert([templateToSave])
+          .select();
       }
-      
-      setNewTemplate({
-        id: null,
-        name: '',
-        subject: '',
-        body: '',
-        group: 'prospects',
-        language: 'en',
-        createdAt: null
-      });
-      setShowTemplateForm(false);
+
+      if (result.error) {
+        console.error('Error adding/updating template:', result.error);
+      } else {
+        if (newTemplate.id) {
+          setEmailTemplates(prev => prev.map(t => (t.id === newTemplate.id ? result.data[0] : t)));
+        } else {
+          setEmailTemplates(prev => [...prev, result.data[0]]);
+        }
+        
+        setNewTemplate({
+          id: null,
+          name: '',
+          subject: '',
+          body: '',
+          group_id: 'prospects',
+          language: 'en',
+          created_at: null
+        });
+        setShowTemplateForm(false);
+      }
     }
   };
 
@@ -329,9 +318,9 @@ const OutreachSystem = () => {
       name: `AI Generated - ${aiTemplateGenerator.purpose}`,
       subject: `Regarding ${aiTemplateGenerator.purpose} - {{company}}`,
       body: `Dear {{name}},\n\nI hope this message finds you well. I am reaching out regarding ${aiTemplateGenerator.purpose.toLowerCase()}.\n\n${aiTemplateGenerator.companyInfo ? `About our company: ${aiTemplateGenerator.companyInfo}\n\n` : ''}Based on my research of {{company}}, I believe there could be mutual value in exploring this opportunity together.\n\n${aiTemplateGenerator.additionalContext ? `Additional context: ${aiTemplateGenerator.additionalContext}\n\n` : ''}Would you be available for a brief conversation to discuss this further?\n\nBest regards,\n[Your Name]`,
-      group: aiTemplateGenerator.targetGroup,
+      group_id: aiTemplateGenerator.targetGroup,
       language: aiTemplateGenerator.language,
-      createdAt: null
+      created_at: null
     };
     
     setNewTemplate(mockGeneratedTemplate);
@@ -340,8 +329,7 @@ const OutreachSystem = () => {
     setShowTemplateForm(true);
   };
 
-  const deleteTemplate = (templateId) => {
-    // Replaced `confirm()` with a modal-like behavior for better UX
+  const deleteTemplate = async (templateId) => {
     const modal = document.createElement('div');
     modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]';
     modal.innerHTML = `
@@ -355,8 +343,17 @@ const OutreachSystem = () => {
     `;
     document.body.appendChild(modal);
 
-    document.getElementById('confirm-btn').addEventListener('click', () => {
-      setEmailTemplates(prev => prev.filter(t => t.id !== templateId));
+    document.getElementById('confirm-btn').addEventListener('click', async () => {
+      const { error } = await supabase
+        .from('email_templates')
+        .delete()
+        .eq('id', templateId);
+
+      if (error) {
+        console.error('Error deleting template:', error);
+      } else {
+        setEmailTemplates(prev => prev.filter(t => t.id !== templateId));
+      }
       document.body.removeChild(modal);
     });
 
@@ -377,17 +374,27 @@ const OutreachSystem = () => {
     });
   };
 
-  const sendBulkEmail = () => {
+  const sendBulkEmail = async () => {
     const selectedContactIds = Array.from(selectedContacts);
-    setContacts(prev => prev.map(contact => 
-      selectedContactIds.includes(contact.id)
-        ? { ...contact, status: 'email_sent', lastContacted: new Date().toISOString().split('T')[0] }
-        : contact
-    ));
+    const { data, error } = await supabase
+      .from('contacts')
+      .update({ status: 'email_sent', last_contacted: new Date().toISOString().split('T')[0] })
+      .in('id', selectedContactIds)
+      .select();
+
+    if (error) {
+      console.error('Error sending bulk emails:', error);
+    } else {
+      setContacts(prev => prev.map(contact => 
+        selectedContactIds.includes(contact.id)
+          ? { ...contact, status: 'email_sent', last_contacted: new Date().toISOString().split('T')[0] }
+          : contact
+      ));
+    }
+    
     setSelectedContacts(new Set());
     setShowEmailComposer(false);
     
-    // Replaced `alert()` with a custom message box for better UX
     const messageBox = document.createElement('div');
     messageBox.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-xl animate-fade-in-down';
     messageBox.innerHTML = `Email sent to ${selectedContactIds.length} contacts!`;
@@ -408,7 +415,7 @@ const OutreachSystem = () => {
       setImportFile(file);
       const reader = new FileReader();
       reader.onload = (e) => {
-        const csv = e.target?.result as string;
+        const csv = e.target?.result;
         if (typeof csv === 'string') {
           const lines = csv.split('\n');
           const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
@@ -422,7 +429,6 @@ const OutreachSystem = () => {
           }).filter(row => Object.values(row).some(v => v));
           
           setImportPreview(preview);
-          // Auto-detect common column mappings
           const autoMapping = {
             name: headers.find(h => /name/i.test(h)) || '',
             email: headers.find(h => /email/i.test(h)) || '',
@@ -435,7 +441,6 @@ const OutreachSystem = () => {
       reader.readAsText(file);
       setShowImportModal(true);
     } else {
-      // Replaced `alert()` with a custom message box
       const messageBox = document.createElement('div');
       messageBox.className = 'fixed top-4 right-4 bg-red-500 text-white px-6 py-3 rounded-lg shadow-xl animate-fade-in-down';
       messageBox.innerHTML = 'Please select a valid CSV file.';
@@ -451,17 +456,17 @@ const OutreachSystem = () => {
     }
   };
 
-  const processImport = () => {
+  const processImport = async () => {
     if (!importFile) return;
     
     const reader = new FileReader();
-    reader.onload = (e) => {
-      const csv = e.target?.result as string;
+    reader.onload = async (e) => {
+      const csv = e.target?.result;
       if (typeof csv === 'string') {
         const lines = csv.split('\n');
         const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
         
-        const newContacts = lines.slice(1).map((line, index) => {
+        const contactsToInsert = lines.slice(1).map((line) => {
           const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
           const row = {};
           headers.forEach((header, idx) => {
@@ -469,26 +474,33 @@ const OutreachSystem = () => {
           });
           
           return {
-            id: Math.max(...contacts.map(c => c.id), 0) + index + 1,
             name: row[importMapping.name] || 'Unknown',
             email: row[importMapping.email] || '',
             company: row[importMapping.company] || '',
             notes: row[importMapping.notes] || '',
             status: 'not_contacted',
-            group: 'prospects',
-            lastContacted: null
+            group_id: 'prospects',
           };
-        }).filter(contact => contact.email); // Only import contacts with email
+        }).filter(contact => contact.email); 
+
+        const { data, error } = await supabase
+          .from('contacts')
+          .insert(contactsToInsert)
+          .select();
+
+        if (error) {
+          console.error('Error importing contacts:', error);
+        } else {
+          setContacts(prev => [...prev, ...data]);
+        }
         
-        setContacts(prev => [...prev, ...newContacts]);
         setShowImportModal(false);
         setImportFile(null);
         setImportPreview([]);
         
-        // Replaced `alert()` with a custom message box
         const messageBox = document.createElement('div');
         messageBox.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-xl animate-fade-in-down';
-        messageBox.innerHTML = `Successfully imported ${newContacts.length} contacts!`;
+        messageBox.innerHTML = `Successfully imported ${contactsToInsert.length} contacts!`;
         document.body.appendChild(messageBox);
     
         setTimeout(() => {
@@ -507,7 +519,7 @@ const OutreachSystem = () => {
     const contactsToExport = getFilteredContacts();
     
     if (format === 'csv') {
-      const headers = ['Name', 'Email', 'Company', 'Status', 'Group', 'Last Contacted', 'Notes'];
+      const headers = ['name', 'email', 'company', 'status', 'group_id', 'last_contacted', 'notes'];
       const csvData = [
         headers.join(','),
         ...contactsToExport.map(contact => [
@@ -515,8 +527,8 @@ const OutreachSystem = () => {
           `"${contact.email}"`,
           `"${contact.company}"`,
           `"${contact.status}"`,
-          `"${contact.group}"`,
-          `"${contact.lastContacted || 'Never'}"`,
+          `"${contact.group_id}"`,
+          `"${contact.last_contacted || 'Never'}"`,
           `"${contact.notes}"`
         ].join(','))
       ].join('\n');
@@ -570,6 +582,17 @@ const OutreachSystem = () => {
   const getLanguageLabel = (code) => {
     return languageOptions.find(l => l.value === code)?.label || code;
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-gray-700 font-medium">Loading data...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -737,8 +760,8 @@ const OutreachSystem = () => {
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
                           <h3 className="text-lg font-semibold text-gray-900">{template.name}</h3>
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${customGroups.find(g => g.id === template.group)?.color || 'bg-gray-100 text-gray-800'}`}>
-                            {customGroups.find(g => g.id === template.group)?.label || template.group}
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${customGroups.find(g => g.id === template.group_id)?.color || 'bg-gray-100 text-gray-800'}`}>
+                            {customGroups.find(g => g.id === template.group_id)?.label || template.group_id}
                           </span>
                           <div className="flex items-center gap-1 text-sm text-gray-500">
                             <Globe size={14} />
@@ -757,9 +780,9 @@ const OutreachSystem = () => {
                               name: template.name,
                               subject: template.subject,
                               body: template.body,
-                              group: template.group,
+                              group_id: template.group_id,
                               language: template.language,
-                              createdAt: template.createdAt
+                              created_at: template.created_at
                             });
                             setShowTemplateForm(true);
                           }}
@@ -781,7 +804,7 @@ const OutreachSystem = () => {
                       </pre>
                     </div>
                     <div className="mt-3 text-xs text-gray-500">
-                      Created: {template.createdAt}
+                      Created: {template.created_at}
                     </div>
                   </div>
                 ))}
@@ -855,7 +878,7 @@ const OutreachSystem = () => {
                       </td>
                       <td className="px-6 py-4">
                         <select
-                          value={contact.group}
+                          value={contact.group_id}
                           onChange={(e) => updateContactGroup(contact.id, e.target.value)}
                           className="text-sm border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                         >
@@ -867,7 +890,7 @@ const OutreachSystem = () => {
                         </select>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-500">
-                        {contact.lastContacted || 'Never'}
+                        {contact.last_contacted || 'Never'}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-500">
                         {contact.notes}
@@ -879,9 +902,6 @@ const OutreachSystem = () => {
             </div>
           </div>
         )}
-
-        {/* Modals would continue here... */}
-        {/* I'll add the rest in the next message to avoid truncation */}
 
         {/* Add Contact Modal */}
         {showNewContactForm && (
@@ -911,8 +931,8 @@ const OutreachSystem = () => {
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
                 />
                 <select
-                  value={newContact.group}
-                  onChange={(e) => setNewContact(prev => ({ ...prev, group: e.target.value }))}
+                  value={newContact.group_id}
+                  onChange={(e) => setNewContact(prev => ({ ...prev, group_id: e.target.value }))}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   {customGroups.map(group => (
@@ -1012,8 +1032,8 @@ const OutreachSystem = () => {
                 />
                 <div className="grid grid-cols-2 gap-4">
                   <select
-                    value={newTemplate.group}
-                    onChange={(e) => setNewTemplate(prev => ({ ...prev, group: e.target.value }))}
+                    value={newTemplate.group_id}
+                    onChange={(e) => setNewTemplate(prev => ({ ...prev, group_id: e.target.value }))}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
                   >
                     {customGroups.map(group => (
@@ -1061,9 +1081,9 @@ const OutreachSystem = () => {
                       name: '',
                       subject: '',
                       body: '',
-                      group: 'prospects',
+                      group_id: 'prospects',
                       language: 'en',
-                      createdAt: null
+                      created_at: null
                     });
                   }}
                   className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
@@ -1247,7 +1267,7 @@ const OutreachSystem = () => {
                     <option value="">Choose a template</option>
                     {emailTemplates.map(template => (
                       <option key={template.id} value={template.id}>
-                        {template.name} ({customGroups.find(g => g.id === template.group)?.label})
+                        {template.name} ({customGroups.find(g => g.id === template.group_id)?.label})
                       </option>
                     ))}
                   </select>
