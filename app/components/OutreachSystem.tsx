@@ -114,54 +114,6 @@ const OutreachSystem = () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showExportDropdown]);
-
-  const [newContact, setNewContact] = useState({
-    name: '',
-    email: '',
-    company: '',
-    status: 'not_contacted',
-    notes: '',
-    group: 'prospects'
-  });
-
-  const [newGroup, setNewGroup] = useState({
-    label: '',
-    color: 'bg-blue-100 text-blue-800'
-  });
-
-  const [newTemplate, setNewTemplate] = useState({
-    id: null as number | null,
-    name: '',
-    subject: '',
-    body: '',
-    group: 'prospects',
-    language: 'en',
-    createdAt: null as string | null
-  });
-
-  const [aiTemplateGenerator, setAiTemplateGenerator] = useState({
-    purpose: '',
-    tone: 'professional',
-    language: 'en',
-    targetGroup: 'prospects',
-    companyInfo: '',
-    additionalContext: '',
-    generating: false
-  });
-
-  const [emailComposer, setEmailComposer] = useState({
-    template: '',
-    subject: '',
-    body: '',
-    selectedContacts: []
-  });
-
-  const [importMapping, setImportMapping] = useState({
-    name: '',
-    email: '',
-    company: '',
-    notes: ''
-  });
   
   const [newContact, setNewContact] = useState({
     name: '',
