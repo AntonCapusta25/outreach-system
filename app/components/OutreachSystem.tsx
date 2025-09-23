@@ -359,27 +359,29 @@ const OutreachSystem = () => {
       setImportFile(file);
       const reader = new FileReader();
       reader.onload = (e) => {
-        const csv = e.target.result;
-        const lines = csv.split('\n');
-        const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-        const preview = lines.slice(1, 6).map(line => {
-          const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
-          const row = {};
-          headers.forEach((header, index) => {
-            row[header] = values[index] || '';
-          });
-          return row;
-        }).filter(row => Object.values(row).some(v => v));
-        
-        setImportPreview(preview);
-        // Auto-detect common column mappings
-        const autoMapping = {
-          name: headers.find(h => /name/i.test(h)) || '',
-          email: headers.find(h => /email/i.test(h)) || '',
-          company: headers.find(h => /company|organization/i.test(h)) || '',
-          notes: headers.find(h => /notes|description/i.test(h)) || ''
-        };
-        setImportMapping(autoMapping);
+        const csv = e.target?.result as string;
+        if (typeof csv === 'string') {
+          const lines = csv.split('\n');
+          const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+          const preview = lines.slice(1, 6).map(line => {
+            const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
+            const row = {};
+            headers.forEach((header, index) => {
+              row[header] = values[index] || '';
+            });
+            return row;
+          }).filter(row => Object.values(row).some(v => v));
+          
+          setImportPreview(preview);
+          // Auto-detect common column mappings
+          const autoMapping = {
+            name: headers.find(h => /name/i.test(h)) || '',
+            email: headers.find(h => /email/i.test(h)) || '',
+            company: headers.find(h => /company|organization/i.test(h)) || '',
+            notes: headers.find(h => /notes|description/i.test(h)) || ''
+          };
+          setImportMapping(autoMapping);
+        }
       };
       reader.readAsText(file);
       setShowImportModal(true);
@@ -393,34 +395,36 @@ const OutreachSystem = () => {
     
     const reader = new FileReader();
     reader.onload = (e) => {
-      const csv = e.target.result;
-      const lines = csv.split('\n');
-      const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-      
-      const newContacts = lines.slice(1).map((line, index) => {
-        const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
-        const row = {};
-        headers.forEach((header, idx) => {
-          row[header] = values[idx] || '';
-        });
+      const csv = e.target?.result as string;
+      if (typeof csv === 'string') {
+        const lines = csv.split('\n');
+        const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
         
-        return {
-          id: Math.max(...contacts.map(c => c.id), 0) + index + 1,
-          name: row[importMapping.name] || 'Unknown',
-          email: row[importMapping.email] || '',
-          company: row[importMapping.company] || '',
-          notes: row[importMapping.notes] || '',
-          status: 'not_contacted',
-          group: 'prospects',
-          lastContacted: null
-        };
-      }).filter(contact => contact.email); // Only import contacts with email
-      
-      setContacts(prev => [...prev, ...newContacts]);
-      setShowImportModal(false);
-      setImportFile(null);
-      setImportPreview([]);
-      alert(`Successfully imported ${newContacts.length} contacts!`);
+        const newContacts = lines.slice(1).map((line, index) => {
+          const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
+          const row = {};
+          headers.forEach((header, idx) => {
+            row[header] = values[idx] || '';
+          });
+          
+          return {
+            id: Math.max(...contacts.map(c => c.id), 0) + index + 1,
+            name: row[importMapping.name] || 'Unknown',
+            email: row[importMapping.email] || '',
+            company: row[importMapping.company] || '',
+            notes: row[importMapping.notes] || '',
+            status: 'not_contacted',
+            group: 'prospects',
+            lastContacted: null
+          };
+        }).filter(contact => contact.email); // Only import contacts with email
+        
+        setContacts(prev => [...prev, ...newContacts]);
+        setShowImportModal(false);
+        setImportFile(null);
+        setImportPreview([]);
+        alert(`Successfully imported ${newContacts.length} contacts!`);
+      }
     };
     reader.readAsText(importFile);
   };
