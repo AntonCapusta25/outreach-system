@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Users, Mail, Send, Plus, Edit, Trash2, UserCheck, UserX, Clock, FileText, Wand2, Globe } from 'lucide-react';
+import { Users, Mail, Send, Plus, Edit, Trash2, UserCheck, UserX, Clock, FileText, Wand2, Globe, Upload, Download } from 'lucide-react';
 
 const OutreachSystem = () => {
   // Sample data - in real app this would come from a backend
@@ -93,8 +93,17 @@ const OutreachSystem = () => {
   const [showNewGroupForm, setShowNewGroupForm] = useState(false);
   const [showTemplateForm, setShowTemplateForm] = useState(false);
   const [showAiTemplateGenerator, setShowAiTemplateGenerator] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [selectedContacts, setSelectedContacts] = useState(new Set());
   const [selectedGroupFilter, setSelectedGroupFilter] = useState('all');
+  const [importFile, setImportFile] = useState(null);
+  const [importPreview, setImportPreview] = useState([]);
+  const [importMapping, setImportMapping] = useState({
+    name: '',
+    email: '',
+    company: '',
+    notes: ''
+  });
   
   const [newContact, setNewContact] = useState({
     name: '',
@@ -344,6 +353,133 @@ const OutreachSystem = () => {
     alert(`Email sent to ${selectedContactIds.length} contacts!`);
   };
 
+  const handleFileUpload = (event) => {
+    const file = event.target.files[0];
+    if (file && file.type === 'text/csv') {
+      setImportFile(file);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const csv = e.target.result;
+        const lines = csv.split('\n');
+        const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+        const preview = lines.slice(1, 6).map(line => {
+          const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
+          const row = {};
+          headers.forEach((header, index) => {
+            row[header] = values[index] || '';
+          });
+          return row;
+        }).filter(row => Object.values(row).some(v => v));
+        
+        setImportPreview(preview);
+        // Auto-detect common column mappings
+        const autoMapping = {
+          name: headers.find(h => /name/i.test(h)) || '',
+          email: headers.find(h => /email/i.test(h)) || '',
+          company: headers.find(h => /company|organization/i.test(h)) || '',
+          notes: headers.find(h => /notes|description/i.test(h)) || ''
+        };
+        setImportMapping(autoMapping);
+      };
+      reader.readAsText(file);
+      setShowImportModal(true);
+    } else {
+      alert('Please select a valid CSV file');
+    }
+  };
+
+  const processImport = () => {
+    if (!importFile) return;
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const csv = e.target.result;
+      const lines = csv.split('\n');
+      const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+      
+      const newContacts = lines.slice(1).map((line, index) => {
+        const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
+        const row = {};
+        headers.forEach((header, idx) => {
+          row[header] = values[idx] || '';
+        });
+        
+        return {
+          id: Math.max(...contacts.map(c => c.id), 0) + index + 1,
+          name: row[importMapping.name] || 'Unknown',
+          email: row[importMapping.email] || '',
+          company: row[importMapping.company] || '',
+          notes: row[importMapping.notes] || '',
+          status: 'not_contacted',
+          group: 'prospects',
+          lastContacted: null
+        };
+      }).filter(contact => contact.email); // Only import contacts with email
+      
+      setContacts(prev => [...prev, ...newContacts]);
+      setShowImportModal(false);
+      setImportFile(null);
+      setImportPreview([]);
+      alert(`Successfully imported ${newContacts.length} contacts!`);
+    };
+    reader.readAsText(importFile);
+  };
+
+  const exportContacts = (format = 'csv') => {
+    const contactsToExport = getFilteredContacts();
+    
+    if (format === 'csv') {
+      const headers = ['Name', 'Email', 'Company', 'Status', 'Group', 'Last Contacted', 'Notes'];
+      const csvData = [
+        headers.join(','),
+        ...contactsToExport.map(contact => [
+          `"${contact.name}"`,
+          `"${contact.email}"`,
+          `"${contact.company}"`,
+          `"${contact.status}"`,
+          `"${contact.group}"`,
+          `"${contact.lastContacted || 'Never'}"`,
+          `"${contact.notes}"`
+        ].join(','))
+      ].join('\n');
+      
+      const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `outreach-contacts-${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else if (format === 'json') {
+      const jsonData = JSON.stringify(contactsToExport, null, 2);
+      const blob = new Blob([jsonData], { type: 'application/json;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `outreach-contacts-${new Date().toISOString().split('T')[0]}.json`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  const exportTemplates = () => {
+    const templatesToExport = getFilteredTemplates();
+    const jsonData = JSON.stringify(templatesToExport, null, 2);
+    const blob = new Blob([jsonData], { type: 'application/json;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `email-templates-${new Date().toISOString().split('T')[0]}.json`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const getStatusBadge = (status) => {
     const statusConfig = statusOptions.find(s => s.value === status);
     return (
@@ -391,9 +527,46 @@ const OutreachSystem = () => {
                     <Plus size={18} />
                     Add Template
                   </button>
+                  <button
+                    onClick={exportTemplates}
+                    className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+                  >
+                    <Download size={18} />
+                    Export Templates
+                  </button>
                 </>
               ) : (
                 <>
+                  <label className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors cursor-pointer">
+                    <Upload size={18} />
+                    Import CSV
+                    <input
+                      type="file"
+                      accept=".csv"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                    />
+                  </label>
+                  <div className="relative">
+                    <button className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors group">
+                      <Download size={18} />
+                      Export
+                    </button>
+                    <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
+                      <button
+                        onClick={() => exportContacts('csv')}
+                        className="block w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-50 rounded-t-lg"
+                      >
+                        Export as CSV
+                      </button>
+                      <button
+                        onClick={() => exportContacts('json')}
+                        className="block w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-50 rounded-b-lg"
+                      >
+                        Export as JSON
+                      </button>
+                    </div>
+                  </div>
                   <button
                     onClick={() => setShowNewContactForm(true)}
                     className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
@@ -1017,6 +1190,135 @@ const OutreachSystem = () => {
                   className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                 >
                   Send Email
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Import CSV Modal */}
+        {showImportModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[80vh] overflow-y-auto">
+              <h2 className="text-xl font-bold mb-4">Import Contacts from CSV</h2>
+              
+              {importPreview.length > 0 && (
+                <>
+                  <div className="mb-6">
+                    <h3 className="text-lg font-medium mb-3">Map CSV Columns</h3>
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Name Column</label>
+                        <select
+                          value={importMapping.name}
+                          onChange={(e) => setImportMapping(prev => ({ ...prev, name: e.target.value }))}
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          <option value="">Select column...</option>
+                          {Object.keys(importPreview[0] || {}).map(header => (
+                            <option key={header} value={header}>{header}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Email Column</label>
+                        <select
+                          value={importMapping.email}
+                          onChange={(e) => setImportMapping(prev => ({ ...prev, email: e.target.value }))}
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          <option value="">Select column...</option>
+                          {Object.keys(importPreview[0] || {}).map(header => (
+                            <option key={header} value={header}>{header}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Company Column</label>
+                        <select
+                          value={importMapping.company}
+                          onChange={(e) => setImportMapping(prev => ({ ...prev, company: e.target.value }))}
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          <option value="">Select column...</option>
+                          {Object.keys(importPreview[0] || {}).map(header => (
+                            <option key={header} value={header}>{header}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Notes Column</label>
+                        <select
+                          value={importMapping.notes}
+                          onChange={(e) => setImportMapping(prev => ({ ...prev, notes: e.target.value }))}
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          <option value="">Select column...</option>
+                          {Object.keys(importPreview[0] || {}).map(header => (
+                            <option key={header} value={header}>{header}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mb-6">
+                    <h3 className="text-lg font-medium mb-3">Preview (First 5 rows)</h3>
+                    <div className="overflow-x-auto">
+                      <table className="w-full border border-gray-200 rounded-lg">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Name</th>
+                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Email</th>
+                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Company</th>
+                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Notes</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {importPreview.map((row, index) => (
+                            <tr key={index} className="border-t border-gray-200">
+                              <td className="px-4 py-2 text-sm">{row[importMapping.name] || '-'}</td>
+                              <td className="px-4 py-2 text-sm">{row[importMapping.email] || '-'}</td>
+                              <td className="px-4 py-2 text-sm">{row[importMapping.company] || '-'}</td>
+                              <td className="px-4 py-2 text-sm">{row[importMapping.notes] || '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div className="bg-blue-50 p-4 rounded-lg mb-6">
+                    <p className="text-sm text-blue-800">
+                      <strong>📋 Import Settings:</strong>
+                    </p>
+                    <ul className="text-sm text-blue-700 mt-2 space-y-1">
+                      <li>• All imported contacts will be set to &quot;Not Contacted&quot; status</li>
+                      <li>• Contacts will be added to the &quot;Prospects&quot; group by default</li>
+                      <li>• Only rows with email addresses will be imported</li>
+                      <li>• Duplicates will be added as separate entries</li>
+                    </ul>
+                  </div>
+                </>
+              )}
+
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => {
+                    setShowImportModal(false);
+                    setImportFile(null);
+                    setImportPreview([]);
+                  }}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={processImport}
+                  disabled={!importMapping.email || importPreview.length === 0}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Import {importPreview.length} Contacts
                 </button>
               </div>
             </div>
