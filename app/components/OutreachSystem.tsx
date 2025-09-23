@@ -94,10 +94,68 @@ const OutreachSystem = () => {
   const [showTemplateForm, setShowTemplateForm] = useState(false);
   const [showAiTemplateGenerator, setShowAiTemplateGenerator] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showExportDropdown, setShowExportDropdown] = useState(false);
   const [selectedContacts, setSelectedContacts] = useState(new Set());
   const [selectedGroupFilter, setSelectedGroupFilter] = useState('all');
   const [importFile, setImportFile] = useState(null);
   const [importPreview, setImportPreview] = useState([]);
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showExportDropdown && !event.target.closest('.relative')) {
+        setShowExportDropdown(false);
+      }
+    };
+
+    if (showExportDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showExportDropdown]);
+
+  const [newContact, setNewContact] = useState({
+    name: '',
+    email: '',
+    company: '',
+    status: 'not_contacted',
+    notes: '',
+    group: 'prospects'
+  });
+
+  const [newGroup, setNewGroup] = useState({
+    label: '',
+    color: 'bg-blue-100 text-blue-800'
+  });
+
+  const [newTemplate, setNewTemplate] = useState({
+    id: null as number | null,
+    name: '',
+    subject: '',
+    body: '',
+    group: 'prospects',
+    language: 'en',
+    createdAt: null as string | null
+  });
+
+  const [aiTemplateGenerator, setAiTemplateGenerator] = useState({
+    purpose: '',
+    tone: 'professional',
+    language: 'en',
+    targetGroup: 'prospects',
+    companyInfo: '',
+    additionalContext: '',
+    generating: false
+  });
+
+  const [emailComposer, setEmailComposer] = useState({
+    template: '',
+    subject: '',
+    body: '',
+    selectedContacts: []
+  });
+
   const [importMapping, setImportMapping] = useState({
     name: '',
     email: '',
@@ -552,24 +610,38 @@ const OutreachSystem = () => {
                     />
                   </label>
                   <div className="relative">
-                    <button className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors group">
+                    <button 
+                      onClick={() => setShowExportDropdown(!showExportDropdown)}
+                      className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+                    >
                       <Download size={18} />
-                      Export
+                      Export {showExportDropdown ? '▲' : '▼'}
                     </button>
-                    <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
-                      <button
-                        onClick={() => exportContacts('csv')}
-                        className="block w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-50 rounded-t-lg"
-                      >
-                        Export as CSV
-                      </button>
-                      <button
-                        onClick={() => exportContacts('json')}
-                        className="block w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-50 rounded-b-lg"
-                      >
-                        Export as JSON
-                      </button>
-                    </div>
+                    {showExportDropdown && (
+                      <div className="absolute top-full left-0 mt-2 bg-white border border-gray-300 rounded-lg shadow-lg z-50 w-48">
+                        <div className="py-1">
+                          <button
+                            onClick={() => {
+                              exportContacts('csv');
+                              setShowExportDropdown(false);
+                            }}
+                            className="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100 block"
+                          >
+                            📄 Export as CSV
+                          </button>
+                          <div className="border-t border-gray-200"></div>
+                          <button
+                            onClick={() => {
+                              exportContacts('json');
+                              setShowExportDropdown(false);
+                            }}
+                            className="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100 block"
+                          >
+                            📋 Export as JSON
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <button
                     onClick={() => setShowNewContactForm(true)}
