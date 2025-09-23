@@ -299,11 +299,13 @@ const OutreachSystem = () => {
     await new Promise(resolve => setTimeout(resolve, 2000));
     
     const mockGeneratedTemplate = {
+      id: null,
       name: `AI Generated - ${aiTemplateGenerator.purpose}`,
       subject: `Regarding ${aiTemplateGenerator.purpose} - {{company}}`,
       body: `Dear {{name}},\n\nI hope this message finds you well. I am reaching out regarding ${aiTemplateGenerator.purpose.toLowerCase()}.\n\n${aiTemplateGenerator.companyInfo ? `About our company: ${aiTemplateGenerator.companyInfo}\n\n` : ''}Based on my research of {{company}}, I believe there could be mutual value in exploring this opportunity together.\n\n${aiTemplateGenerator.additionalContext ? `Additional context: ${aiTemplateGenerator.additionalContext}\n\n` : ''}Would you be available for a brief conversation to discuss this further?\n\nBest regards,\n[Your Name]`,
       group: aiTemplateGenerator.targetGroup,
-      language: aiTemplateGenerator.language
+      language: aiTemplateGenerator.language,
+      createdAt: null
     };
     
     setNewTemplate(mockGeneratedTemplate);
