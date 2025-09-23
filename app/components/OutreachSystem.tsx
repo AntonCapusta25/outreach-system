@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useEffect } from 'react';
 import { Users, Mail, Send, Plus, Edit, Trash2, UserCheck, UserX, Clock, FileText, Wand2, Globe } from 'lucide-react';
 
@@ -109,11 +111,13 @@ const OutreachSystem = () => {
   });
 
   const [newTemplate, setNewTemplate] = useState({
+    id: null as number | null,
     name: '',
     subject: '',
     body: '',
     group: 'prospects',
-    language: 'en'
+    language: 'en',
+    createdAt: null as string | null
   });
 
   const [aiTemplateGenerator, setAiTemplateGenerator] = useState({
@@ -276,11 +280,13 @@ const OutreachSystem = () => {
       }
       
       setNewTemplate({
+        id: null,
         name: '',
         subject: '',
         body: '',
         group: 'prospects',
-        language: 'en'
+        language: 'en',
+        createdAt: null
       });
       setShowTemplateForm(false);
     }
@@ -479,7 +485,15 @@ const OutreachSystem = () => {
                       <div className="flex gap-2">
                         <button
                           onClick={() => {
-                            setNewTemplate({ ...template });
+                            setNewTemplate({ 
+                              id: template.id,
+                              name: template.name,
+                              subject: template.subject,
+                              body: template.body,
+                              group: template.group,
+                              language: template.language,
+                              createdAt: template.createdAt
+                            });
                             setShowTemplateForm(true);
                           }}
                           className="text-blue-600 hover:text-blue-800 p-1"
@@ -599,6 +613,9 @@ const OutreachSystem = () => {
           </div>
         )}
 
+        {/* Modals would continue here... */}
+        {/* I'll add the rest in the next message to avoid truncation */}
+
         {/* Add Contact Modal */}
         {showNewContactForm && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -642,7 +659,7 @@ const OutreachSystem = () => {
                   value={newContact.notes}
                   onChange={(e) => setNewContact(prev => ({ ...prev, notes: e.target.value }))}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
-                  rows="3"
+                  rows={3}
                 />
               </div>
               <div className="flex justify-end gap-3 mt-6">
@@ -762,10 +779,10 @@ const OutreachSystem = () => {
                   value={newTemplate.body}
                   onChange={(e) => setNewTemplate(prev => ({ ...prev, body: e.target.value }))}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
-                  rows="12"
+                  rows={12}
                 />
                 <div className="text-sm text-gray-600">
-                  <p><strong>Available variables:</strong> {{name}}, {{company}}, {{email}}</p>
+                  <p><strong>Available variables:</strong> {`{{name}}, {{company}}, {{email}}`}</p>
                 </div>
               </div>
               <div className="flex justify-end gap-3 mt-6">
@@ -773,11 +790,13 @@ const OutreachSystem = () => {
                   onClick={() => {
                     setShowTemplateForm(false);
                     setNewTemplate({
+                      id: null,
                       name: '',
                       subject: '',
                       body: '',
                       group: 'prospects',
-                      language: 'en'
+                      language: 'en',
+                      createdAt: null
                     });
                   }}
                   className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
@@ -806,7 +825,7 @@ const OutreachSystem = () => {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    What's the purpose of this email?
+                    What&apos;s the purpose of this email?
                   </label>
                   <input
                     type="text"
@@ -873,7 +892,7 @@ const OutreachSystem = () => {
                     value={aiTemplateGenerator.companyInfo}
                     onChange={(e) => setAiTemplateGenerator(prev => ({ ...prev, companyInfo: e.target.value }))}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
-                    rows="3"
+                    rows={3}
                   />
                 </div>
                 
@@ -886,7 +905,7 @@ const OutreachSystem = () => {
                     value={aiTemplateGenerator.additionalContext}
                     onChange={(e) => setAiTemplateGenerator(prev => ({ ...prev, additionalContext: e.target.value }))}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
-                    rows="3"
+                    rows={3}
                   />
                 </div>
                 
@@ -978,10 +997,10 @@ const OutreachSystem = () => {
                   value={emailComposer.body}
                   onChange={(e) => setEmailComposer(prev => ({ ...prev, body: e.target.value }))}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
-                  rows="10"
+                  rows={10}
                 />
                 <div className="text-sm text-gray-600">
-                  <p><strong>Available variables:</strong> {{name}}, {{company}}, {{email}}</p>
+                  <p><strong>Available variables:</strong> {`{{name}}, {{company}}, {{email}}`}</p>
                 </div>
               </div>
               <div className="flex justify-end gap-3 mt-6">
