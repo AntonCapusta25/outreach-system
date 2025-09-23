@@ -99,6 +99,12 @@ const OutreachSystem = () => {
   const [selectedGroupFilter, setSelectedGroupFilter] = useState('all');
   const [importFile, setImportFile] = useState(null);
   const [importPreview, setImportPreview] = useState([]);
+  const [importMapping, setImportMapping] = useState({
+    name: '',
+    email: '',
+    company: '',
+    notes: ''
+  });
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (showExportDropdown && !event.target.closest('.relative')) {
@@ -154,6 +160,20 @@ const OutreachSystem = () => {
     subject: '',
     body: '',
     selectedContacts: []
+  });
+
+  const [newContact, setNewContact] = useState({
+    name: '',
+    email: '',
+    company: '',
+    status: 'not_contacted',
+    notes: '',
+    group: 'prospects'
+  });
+
+  const [newGroup, setNewGroup] = useState({
+    label: '',
+    color: 'bg-blue-100 text-blue-800'
   });
 
   const statusOptions = [
