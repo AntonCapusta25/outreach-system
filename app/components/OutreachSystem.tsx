@@ -105,22 +105,7 @@ const OutreachSystem = () => {
     company: '',
     notes: ''
   });
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (showExportDropdown && !event.target.closest('.relative')) {
-        setShowExportDropdown(false);
-      }
-    };
 
-    if (showExportDropdown) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showExportDropdown]);
-  
   const [newContact, setNewContact] = useState({
     name: '',
     email: '',
@@ -162,20 +147,22 @@ const OutreachSystem = () => {
     selectedContacts: []
   });
 
-  const [newContact, setNewContact] = useState({
-    name: '',
-    email: '',
-    company: '',
-    status: 'not_contacted',
-    notes: '',
-    group: 'prospects'
-  });
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showExportDropdown && !event.target.closest('.relative')) {
+        setShowExportDropdown(false);
+      }
+    };
 
-  const [newGroup, setNewGroup] = useState({
-    label: '',
-    color: 'bg-blue-100 text-blue-800'
-  });
+    if (showExportDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
 
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showExportDropdown]);
+  
   const statusOptions = [
     { value: 'not_contacted', label: 'Not Contacted', color: 'bg-gray-100 text-gray-800' },
     { value: 'email_sent', label: 'Email Sent', color: 'bg-blue-100 text-blue-800' },
@@ -354,9 +341,28 @@ const OutreachSystem = () => {
   };
 
   const deleteTemplate = (templateId) => {
-    if (confirm('Are you sure you want to delete this template?')) {
+    // Replaced `confirm()` with a modal-like behavior for better UX
+    const modal = document.createElement('div');
+    modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]';
+    modal.innerHTML = `
+      <div class="bg-white rounded-lg p-6 w-full max-w-sm text-center shadow-lg">
+        <p class="text-lg font-semibold mb-4">Are you sure you want to delete this template?</p>
+        <div class="flex justify-center gap-4">
+          <button id="cancel-btn" class="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors">Cancel</button>
+          <button id="confirm-btn" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">Delete</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    document.getElementById('confirm-btn').addEventListener('click', () => {
       setEmailTemplates(prev => prev.filter(t => t.id !== templateId));
-    }
+      document.body.removeChild(modal);
+    });
+
+    document.getElementById('cancel-btn').addEventListener('click', () => {
+      document.body.removeChild(modal);
+    });
   };
 
   const toggleContactSelection = (contactId) => {
@@ -380,7 +386,20 @@ const OutreachSystem = () => {
     ));
     setSelectedContacts(new Set());
     setShowEmailComposer(false);
-    alert(`Email sent to ${selectedContactIds.length} contacts!`);
+    
+    // Replaced `alert()` with a custom message box for better UX
+    const messageBox = document.createElement('div');
+    messageBox.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-xl animate-fade-in-down';
+    messageBox.innerHTML = `Email sent to ${selectedContactIds.length} contacts!`;
+    document.body.appendChild(messageBox);
+
+    setTimeout(() => {
+      messageBox.classList.remove('animate-fade-in-down');
+      messageBox.classList.add('animate-fade-out-up');
+      setTimeout(() => {
+        document.body.removeChild(messageBox);
+      }, 500);
+    }, 3000);
   };
 
   const handleFileUpload = (event) => {
@@ -416,7 +435,19 @@ const OutreachSystem = () => {
       reader.readAsText(file);
       setShowImportModal(true);
     } else {
-      alert('Please select a valid CSV file');
+      // Replaced `alert()` with a custom message box
+      const messageBox = document.createElement('div');
+      messageBox.className = 'fixed top-4 right-4 bg-red-500 text-white px-6 py-3 rounded-lg shadow-xl animate-fade-in-down';
+      messageBox.innerHTML = 'Please select a valid CSV file.';
+      document.body.appendChild(messageBox);
+
+      setTimeout(() => {
+        messageBox.classList.remove('animate-fade-in-down');
+        messageBox.classList.add('animate-fade-out-up');
+        setTimeout(() => {
+          document.body.removeChild(messageBox);
+        }, 500);
+      }, 3000);
     }
   };
 
@@ -453,7 +484,20 @@ const OutreachSystem = () => {
         setShowImportModal(false);
         setImportFile(null);
         setImportPreview([]);
-        alert(`Successfully imported ${newContacts.length} contacts!`);
+        
+        // Replaced `alert()` with a custom message box
+        const messageBox = document.createElement('div');
+        messageBox.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-xl animate-fade-in-down';
+        messageBox.innerHTML = `Successfully imported ${newContacts.length} contacts!`;
+        document.body.appendChild(messageBox);
+    
+        setTimeout(() => {
+          messageBox.classList.remove('animate-fade-in-down');
+          messageBox.classList.add('animate-fade-out-up');
+          setTimeout(() => {
+            document.body.removeChild(messageBox);
+          }, 500);
+        }, 3000);
       }
     };
     reader.readAsText(importFile);
