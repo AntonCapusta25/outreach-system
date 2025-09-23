@@ -11,7 +11,7 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Apps Script Configuration
 const APPS_SCRIPT_CONFIG = {
-  WEB_APP_URL: 'https://script.google.com/macros/s/AKfycbx_xtnGoicKH2Z1WRfii7IRqR08oPz_CYtOVhkWwJABKmW4oQvSwQhJKqbHzqNlzNRS/exec', // Replace with your deployed Apps Script URL
+  WEB_APP_URL: 'https://script.google.com/macros/s/AKfycbzLFppGZ6Vs2zEzsT3HsZluaY4GyTJzrYL1aXBfTukTxC784QWwiDUNXwiSoWtFxmHj/exec', // Replace with your deployed Apps Script URL
   TIMEOUT: 30000, // 30 seconds timeout
 };
 
