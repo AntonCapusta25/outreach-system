@@ -9,11 +9,25 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+// Apps Script Configuration
+const APPS_SCRIPT_CONFIG = {
+  WEB_APP_URL: 'https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec', // Replace with your deployed Apps Script URL
+  TIMEOUT: 30000, // 30 seconds timeout
+};
+
 const OutreachSystem = () => {
   const [contacts, setContacts] = useState([]);
   const [customGroups, setCustomGroups] = useState([]);
   const [emailTemplates, setEmailTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Apps Script integration state
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailStats, setEmailStats] = useState({
+    dailyQuotaUsed: 0,
+    dailyQuotaRemaining: 100,
+    maxDailyQuota: 100
+  });
 
   const [activeTab, setActiveTab] = useState('all');
   const [showNewContactForm, setShowNewContactForm] = useState(false);
@@ -96,6 +110,11 @@ const OutreachSystem = () => {
     fetchInitialData();
   }, []);
 
+  // Fetch email stats on component mount
+  useEffect(() => {
+    fetchEmailStats();
+  }, []);
+
   // Handle outside clicks for export dropdown
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -112,6 +131,82 @@ const OutreachSystem = () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showExportDropdown]);
+
+  // Fetch email stats from Apps Script
+  const fetchEmailStats = async () => {
+    try {
+      const response = await fetch(`${APPS_SCRIPT_CONFIG.WEB_APP_URL}?action=stats`);
+      if (response.ok) {
+        const stats = await response.json();
+        setEmailStats(stats);
+      }
+    } catch (error) {
+      console.error('Error fetching email stats:', error);
+    }
+  };
+
+  // Show detailed email results modal
+  const showEmailResults = (result) => {
+    const modal = document.createElement('div');
+    modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]';
+    
+    const successList = result.successful.map(s => 
+      `<li class="text-green-700">✓ ${s.name} (${s.email})</li>`
+    ).join('');
+    
+    const failureList = result.failed.map(f => 
+      `<li class="text-red-700">✗ ${f.name} (${f.email}) - ${f.error}</li>`
+    ).join('');
+    
+    modal.innerHTML = `
+      <div class="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+        <h2 class="text-xl font-bold mb-4">Email Sending Results</h2>
+        
+        <div class="mb-6">
+          <div class="grid grid-cols-2 gap-4 text-center">
+            <div class="bg-green-100 p-4 rounded-lg">
+              <div class="text-2xl font-bold text-green-600">${result.totalSent}</div>
+              <div class="text-green-700">Emails Sent</div>
+            </div>
+            <div class="bg-red-100 p-4 rounded-lg">
+              <div class="text-2xl font-bold text-red-600">${result.totalFailed}</div>
+              <div class="text-red-700">Failed</div>
+            </div>
+          </div>
+        </div>
+
+        ${result.successful.length > 0 ? `
+          <div class="mb-4">
+            <h3 class="font-semibold text-green-700 mb-2">Successfully Sent:</h3>
+            <ul class="space-y-1 max-h-40 overflow-y-auto">
+              ${successList}
+            </ul>
+          </div>
+        ` : ''}
+
+        ${result.failed.length > 0 ? `
+          <div class="mb-4">
+            <h3 class="font-semibold text-red-700 mb-2">Failed to Send:</h3>
+            <ul class="space-y-1 max-h-40 overflow-y-auto">
+              ${failureList}
+            </ul>
+          </div>
+        ` : ''}
+
+        <div class="flex justify-end">
+          <button id="close-results" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+            Close
+          </button>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    document.getElementById('close-results').addEventListener('click', () => {
+      document.body.removeChild(modal);
+    });
+  };
   
   const statusOptions = [
     { value: 'not_contacted', label: 'Not Contacted', color: 'bg-gray-100 text-gray-800' },
@@ -370,43 +465,130 @@ const OutreachSystem = () => {
       } else {
         newSet.add(contactId);
       }
+      console.log('Selected contacts:', Array.from(newSet)); // Debug log
       return newSet;
     });
   };
 
+  // Enhanced sendBulkEmail function with Apps Script integration
   const sendBulkEmail = async () => {
     const selectedContactIds = Array.from(selectedContacts);
-    const { data, error } = await supabase
-      .from('contacts')
-      .update({ status: 'email_sent', last_contacted: new Date().toISOString().split('T')[0] })
-      .in('id', selectedContactIds)
-      .select();
-
-    if (error) {
-      console.error('Error sending bulk emails:', error);
-    } else {
-      setContacts(prev => prev.map(contact => 
-        selectedContactIds.includes(contact.id)
-          ? { ...contact, status: 'email_sent', last_contacted: new Date().toISOString().split('T')[0] }
-          : contact
-      ));
+    console.log('Sending emails to:', selectedContactIds);
+    
+    if (selectedContactIds.length === 0) {
+      alert('Please select at least one contact to send emails to.');
+      return;
     }
-    
-    setSelectedContacts(new Set());
-    setShowEmailComposer(false);
-    
-    const messageBox = document.createElement('div');
-    messageBox.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-xl animate-fade-in-down';
-    messageBox.innerHTML = `Email sent to ${selectedContactIds.length} contacts!`;
-    document.body.appendChild(messageBox);
 
-    setTimeout(() => {
-      messageBox.classList.remove('animate-fade-in-down');
-      messageBox.classList.add('animate-fade-out-up');
-      setTimeout(() => {
-        document.body.removeChild(messageBox);
-      }, 500);
-    }, 3000);
+    if (!emailComposer.subject.trim() || !emailComposer.body.trim()) {
+      alert('Please fill in both subject and body fields.');
+      return;
+    }
+
+    // Check daily quota
+    if (emailStats.dailyQuotaRemaining < selectedContactIds.length) {
+      const proceed = confirm(
+        `Warning: You only have ${emailStats.dailyQuotaRemaining} emails remaining in your daily quota. ` +
+        `You're trying to send ${selectedContactIds.length} emails. Continue anyway?`
+      );
+      if (!proceed) return;
+    }
+
+    setEmailSending(true);
+
+    try {
+      // Get selected contacts data
+      const selectedContactsData = contacts.filter(contact => 
+        selectedContactIds.includes(contact.id)
+      );
+
+      // Prepare data for Apps Script
+      const emailData = {
+        contacts: selectedContactsData.map(contact => ({
+          id: contact.id,
+          name: contact.name,
+          email: contact.email,
+          company: contact.company || '',
+        })),
+        subject: emailComposer.subject,
+        body: emailComposer.body,
+        bcc: false, // Set to true if you want to BCC yourself
+        trackOpens: false, // Set to true if you want to track email opens
+      };
+
+      console.log('Sending email data to Apps Script:', emailData);
+
+      // Send to Apps Script backend
+      const response = await fetch(APPS_SCRIPT_CONFIG.WEB_APP_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(emailData),
+        signal: AbortSignal.timeout(APPS_SCRIPT_CONFIG.TIMEOUT)
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('Apps Script response:', result);
+
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      // Update contact statuses in database
+      const successfulContactIds = result.successful.map(s => s.contactId);
+      
+      if (successfulContactIds.length > 0) {
+        const { error: dbError } = await supabase
+          .from('contacts')
+          .update({ 
+            status: 'email_sent', 
+            last_contacted: new Date().toISOString().split('T')[0] 
+          })
+          .in('id', successfulContactIds);
+
+        if (dbError) {
+          console.error('Error updating database:', dbError);
+        }
+
+        // Update local state
+        setContacts(prev => prev.map(contact => 
+          successfulContactIds.includes(contact.id)
+            ? { ...contact, status: 'email_sent', last_contacted: new Date().toISOString().split('T')[0] }
+            : contact
+        ));
+      }
+
+      // Clear selections and close composer
+      setSelectedContacts(new Set());
+      setShowEmailComposer(false);
+
+      // Refresh email stats
+      await fetchEmailStats();
+
+      // Show detailed results
+      showEmailResults(result);
+      
+    } catch (error) {
+      console.error('Error in sendBulkEmail:', error);
+      
+      let errorMessage = 'An error occurred while sending emails.';
+      if (error.name === 'AbortError') {
+        errorMessage = 'Email sending timed out. Please try again with fewer contacts.';
+      } else if (error.message.includes('quota')) {
+        errorMessage = 'Daily email quota exceeded. Please try again tomorrow.';
+      } else {
+        errorMessage = `Error: ${error.message}`;
+      }
+      
+      alert(errorMessage);
+    } finally {
+      setEmailSending(false);
+    }
   };
 
   const handleFileUpload = (event) => {
@@ -604,7 +786,13 @@ const OutreachSystem = () => {
               <h1 className="text-3xl font-bold text-gray-900">Outreach Management</h1>
               <p className="text-gray-600 mt-1">Manage your contacts, groups, and email campaigns</p>
             </div>
-            <div className="flex gap-3">
+            <div className="flex gap-3 items-center">
+              {/* Email Quota Display */}
+              <div className="text-sm text-gray-600 bg-gray-100 px-3 py-2 rounded-lg">
+                Daily Quota: {emailStats.dailyQuotaUsed}/{emailStats.maxDailyQuota} used
+                ({emailStats.dailyQuotaRemaining} remaining)
+              </div>
+
               {activeTab === 'templates' ? (
                 <>
                   <button
@@ -691,17 +879,41 @@ const OutreachSystem = () => {
                   </button>
                   <button
                     onClick={() => setShowEmailComposer(true)}
-                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
-                    disabled={selectedContacts.size === 0}
+                    className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
+                      selectedContacts.size === 0 
+                        ? 'bg-gray-400 text-gray-200 cursor-not-allowed' 
+                        : emailSending
+                        ? 'bg-yellow-500 text-white cursor-wait'
+                        : 'bg-green-600 hover:bg-green-700 text-white'
+                    }`}
+                    disabled={selectedContacts.size === 0 || emailSending}
+                    title={
+                      selectedContacts.size === 0 
+                        ? 'Select contacts first' 
+                        : emailSending 
+                        ? 'Sending emails...' 
+                        : `Send email to ${selectedContacts.size} selected contacts`
+                    }
                   >
-                    <Send size={18} />
-                    Send Email ({selectedContacts.size})
+                    {emailSending ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Send size={18} />
+                        Send Email ({selectedContacts.size})
+                      </>
+                    )}
                   </button>
                 </>
               )}
             </div>
           </div>
         </div>
+
+        {/* Rest of your existing JSX remains the same until the Email Composer Modal */}
 
         {/* Tabs */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
@@ -902,6 +1114,8 @@ const OutreachSystem = () => {
             </div>
           </div>
         )}
+
+        {/* All existing modals remain the same until Email Composer Modal */}
 
         {/* Add Contact Modal */}
         {showNewContactForm && (
@@ -1233,7 +1447,7 @@ const OutreachSystem = () => {
           </div>
         )}
 
-        {/* Email Composer Modal */}
+        {/* Enhanced Email Composer Modal */}
         {showEmailComposer && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
@@ -1289,26 +1503,52 @@ const OutreachSystem = () => {
                 <div className="text-sm text-gray-600">
                   <p><strong>Available variables:</strong> {`{{name}}, {{company}}, {{email}}`}</p>
                 </div>
+
+                {/* Quota Warning */}
+                {emailStats.dailyQuotaRemaining < selectedContacts.size && (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                    <p className="text-sm text-yellow-800">
+                      <strong>⚠️ Quota Warning:</strong> You only have {emailStats.dailyQuotaRemaining} emails 
+                      remaining in your daily quota, but you're trying to send to {selectedContacts.size} contacts.
+                    </p>
+                  </div>
+                )}
               </div>
               <div className="flex justify-end gap-3 mt-6">
                 <button
                   onClick={() => setShowEmailComposer(false)}
                   className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+                  disabled={emailSending}
                 >
                   Cancel
                 </button>
                 <button
                   onClick={sendBulkEmail}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  disabled={emailSending || !emailComposer.subject.trim() || !emailComposer.body.trim()}
+                  className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
+                    emailSending || !emailComposer.subject.trim() || !emailComposer.body.trim()
+                      ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                      : 'bg-green-600 hover:bg-green-700 text-white'
+                  }`}
                 >
-                  Send Email
+                  {emailSending ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <Send size={16} />
+                      Send Email
+                    </>
+                  )}
                 </button>
               </div>
             </div>
           </div>
         )}
 
-        {/* Import CSV Modal */}
+        {/* Import CSV Modal remains the same */}
         {showImportModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[80vh] overflow-y-auto">
