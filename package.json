@@ -1,5 +1,5 @@
 {
-  "name": "outreach-system",
+  "name": "your-outreach-app",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -9,10 +9,11 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.39.8",
+    "lucide-react": "^0.263.1",
     "next": "14.0.4",
     "react": "^18",
-    "react-dom": "^18",
-    "lucide-react": "^0.263.1"
+    "react-dom": "^18"
   },
   "devDependencies": {
     "@types/node": "^20",
