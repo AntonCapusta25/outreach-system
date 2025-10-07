@@ -480,53 +480,59 @@ const OutreachSystem = () => {
     });
   };
 
-// 📧 Fixed sendBulkEmail Function with Proper Authentication
-// Replace your current sendBulkEmail function with this version
+// ✅ CORRECTED sendBulkEmail Function
+// This version uses YOUR actual state variables:
+// - selectedContacts (Set)
+// - emailComposer (object with subject/body)
+// - contacts (array)
+//
+// REPLACE your current sendBulkEmail function (around line 486) with this:
 
 const sendBulkEmail = async () => {
-  // Validation checks
-  if (!selectedTemplate) {
-    alert('Please select an email template.');
-    return;
-  }
-
-  if (selectedContactIds.length === 0) {
-    alert('Please select at least one contact.');
-    return;
-  }
-
-  // Check authentication BEFORE doing anything else
-  const { data: { session }, error: authError } = await supabase.auth.getSession();
-  
-  if (authError || !session) {
-    alert('You must be signed in to send emails. Please log in and try again.');
-    console.error('Authentication error:', authError || 'No session found');
-    return;
-  }
-
-  console.log('✅ User authenticated:', session.user.email);
-
-  // Get contacts to send to
-  const contactsToSend = contacts.filter(c => selectedContactIds.includes(c.id));
-  
-  if (contactsToSend.length === 0) {
-    alert('No valid contacts selected.');
-    return;
-  }
-
-  // Confirm before sending
-  const confirmMessage = `Send email to ${contactsToSend.length} contact(s)?\n\n` +
-    `Template: ${selectedTemplate.name}\n` +
-    `Subject: ${selectedTemplate.subject}`;
-  
-  if (!confirm(confirmMessage)) {
-    return;
-  }
-
-  // Start sending process
-  setEmailSending(true);
-  
   try {
+    // Check authentication FIRST
+    const { data: { session }, error: authError } = await supabase.auth.getSession();
+    
+    if (authError || !session) {
+      alert('You must be signed in to send emails. Please log in and try again.');
+      console.error('Authentication error:', authError || 'No session found');
+      return;
+    }
+
+    console.log('✅ User authenticated:', session.user.email);
+
+    // Validation checks using the correct state variables
+    if (!emailComposer.subject.trim() || !emailComposer.body.trim()) {
+      alert('Please enter both subject and email body.');
+      return;
+    }
+
+    if (selectedContacts.size === 0) {
+      alert('Please select at least one contact.');
+      return;
+    }
+
+    // Convert Set to Array and get contact details
+    const selectedContactIds = Array.from(selectedContacts);
+    const contactsToSend = contacts.filter(c => selectedContactIds.includes(c.id));
+    
+    if (contactsToSend.length === 0) {
+      alert('No valid contacts selected.');
+      return;
+    }
+
+    // Confirm before sending
+    const confirmMessage = `Send email to ${contactsToSend.length} contact(s)?\n\n` +
+      `Subject: ${emailComposer.subject}\n` +
+      `Recipients: ${contactsToSend.map(c => c.email).join(', ')}`;
+    
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
+    // Start sending process
+    setEmailSending(true);
+    
     console.log('Selected contacts:', selectedContactIds);
     console.log('Sending emails to:', contactsToSend.map(c => c.id));
     console.log('Sending email data to Supabase Edge Function');
@@ -541,10 +547,10 @@ const sendBulkEmail = async () => {
         title: contact.title || '',
       })),
       template: {
-        subject: selectedTemplate.subject,
-        body: selectedTemplate.body,
+        subject: emailComposer.subject,
+        body: emailComposer.body,
       },
-      campaignId: selectedCampaignId || null,
+      campaignId: null, // No campaign tracking in current version
     };
 
     console.log('Prepared email data:', emailData);
@@ -590,9 +596,20 @@ const sendBulkEmail = async () => {
       alert(`✅ Successfully sent ${sent} email(s)!`);
     }
 
-    // Clear selection and refresh
-    setSelectedContactIds([]);
-    await fetchContacts();
+    // Clear selection and close modal
+    setSelectedContacts(new Set());
+    setShowEmailComposer(false);
+    setEmailComposer({
+      template: '',
+      subject: '',
+      body: '',
+      selectedContacts: []
+    });
+    
+    // Refresh data
+    const { data: contactsData } = await supabase.from('contacts').select('*');
+    if (contactsData) setContacts(contactsData);
+    
     await fetchEmailStats();
 
   } catch (error) {
