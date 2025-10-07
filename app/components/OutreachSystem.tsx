@@ -9,19 +9,13 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// Apps Script Configuration
-const APPS_SCRIPT_CONFIG = {
-  WEB_APP_URL: 'https://script.google.com/macros/s/AKfycbxL7cJdCm6N1O5lxuK_PEn3uaFWdFv6Hsw6KF6CP6h2ElGJGzQ1pbTdgffuxMYUgWjePg/exec', // Replace with your deployed Apps Script URL
-  TIMEOUT: 30000, // 30 seconds timeout
-};
-
 const OutreachSystem = () => {
   const [contacts, setContacts] = useState([]);
   const [customGroups, setCustomGroups] = useState([]);
   const [emailTemplates, setEmailTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Apps Script integration state
+  // Email sending state
   const [emailSending, setEmailSending] = useState(false);
   const [emailStats, setEmailStats] = useState({
     dailyQuotaUsed: 0,
@@ -132,16 +126,32 @@ const OutreachSystem = () => {
     };
   }, [showExportDropdown]);
 
-  // Fetch email stats from Apps Script
+  // Fetch email stats from Supabase Edge Function
   const fetchEmailStats = async () => {
     try {
-      const response = await fetch(`${APPS_SCRIPT_CONFIG.WEB_APP_URL}?action=stats`);
-      if (response.ok) {
-        const stats = await response.json();
-        setEmailStats(stats);
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        console.warn('Not authenticated, using default stats');
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke('get-email-stats', {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (!error && data) {
+        setEmailStats({
+          dailyQuotaUsed: data.dailyQuotaUsed || 0,
+          dailyQuotaRemaining: data.dailyQuotaRemaining || 100,
+          maxDailyQuota: data.maxDailyQuota || 100,
+        });
       }
     } catch (error) {
       console.error('Error fetching email stats:', error);
+      // Keep default stats on error
     }
   };
 
@@ -302,7 +312,7 @@ const OutreachSystem = () => {
   };
 
   const updateContactGroup = async (contactId, newGroupId) => {
-    const { data, error } = await supabase
+    const { data, error} = await supabase
       .from('contacts')
       .update({ group_id: newGroupId })
       .eq('id', contactId)
@@ -465,213 +475,94 @@ const OutreachSystem = () => {
       } else {
         newSet.add(contactId);
       }
-      console.log('Selected contacts:', Array.from(newSet)); // Debug log
+      console.log('Selected contacts:', Array.from(newSet));
       return newSet;
     });
   };
 
- // Updated email sending function for your React component
-// Replace the existing sendBulkEmail function with this version
-
-/**
- * Send bulk emails via Supabase Edge Function
- * This calls Supabase, which then calls Google Apps Script
- */
-const sendBulkEmail = async () => {
-  const selectedContactIds = Array.from(selectedContacts);
-  console.log('Sending emails to:', selectedContactIds);
-  
-  if (selectedContactIds.length === 0) {
-    alert('Please select at least one contact to send emails to.');
-    return;
-  }
-
-  if (!emailComposer.subject.trim() || !emailComposer.body.trim()) {
-    alert('Please fill in both subject and body fields.');
-    return;
-  }
-
-  // Check daily quota (if you have quota data from backend)
-  if (emailStats.dailyQuotaRemaining < selectedContactIds.length) {
-    const proceed = confirm(
-      `Warning: You only have ${emailStats.dailyQuotaRemaining} emails remaining in your daily quota. ` +
-      `You're trying to send ${selectedContactIds.length} emails. Continue anyway?`
-    );
-    if (!proceed) return;
-  }
-
-  setEmailSending(true);
-
-  try {
-    // Get selected contacts data
-    const selectedContactsData = contacts.filter(contact => 
-      selectedContactIds.includes(contact.id)
-    );
-
-    // Prepare data for Supabase Edge Function
-    const emailData = {
-      contacts: selectedContactsData.map(contact => ({
-        id: contact.id,
-        name: contact.name,
-        email: contact.email,
-        company: contact.company || '',
-        phone: contact.phone || '',
-        position: contact.position || '',
-      })),
-      subject: emailComposer.subject,
-      body: emailComposer.body,
-      options: {
-        bcc: false, // Set to your email if you want to BCC yourself
-        trackOpens: false,
-        fromName: 'Autoflow Studio', // Customize this
-        fromEmail: null, // Set if you want a specific reply-to
-      },
-    };
-
-    console.log('Sending email data to Supabase Edge Function:', {
-      contactCount: emailData.contacts.length,
-      subject: emailData.subject,
-    });
-
-    // Get Supabase session for authentication
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  /**
+   * Send bulk emails via Supabase Edge Function
+   */
+  const sendBulkEmail = async () => {
+    const selectedContactIds = Array.from(selectedContacts);
+    console.log('Sending emails to:', selectedContactIds);
     
-    if (sessionError || !session) {
-      throw new Error('Not authenticated. Please log in again.');
+    if (selectedContactIds.length === 0) {
+      alert('Please select at least one contact to send emails to.');
+      return;
     }
 
-    // Call Supabase Edge Function
-    const { data: result, error: functionError } = await supabase.functions.invoke('send-emails', {
-      body: emailData,
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-      },
-    });
-
-    if (functionError) {
-      console.error('Edge Function error:', functionError);
-      throw new Error(functionError.message || 'Failed to send emails');
+    if (!emailComposer.subject.trim() || !emailComposer.body.trim()) {
+      alert('Please fill in both subject and body fields.');
+      return;
     }
 
-    console.log('Edge Function response:', result);
-
-    if (!result.success) {
-      throw new Error(result.error || 'Failed to send emails');
+    if (emailStats.dailyQuotaRemaining < selectedContactIds.length) {
+      const proceed = confirm(
+        `Warning: You only have ${emailStats.dailyQuotaRemaining} emails remaining in your daily quota. ` +
+        `You're trying to send ${selectedContactIds.length} emails. Continue anyway?`
+      );
+      if (!proceed) return;
     }
 
-    // Update contact statuses in database
-    const successfulContactIds = result.data.successful.map((s: any) => s.contactId);
-    
-    if (successfulContactIds.length > 0) {
-      const { error: dbError } = await supabase
-        .from('contacts')
-        .update({ 
-          status: 'email_sent', 
-          last_contacted: new Date().toISOString().split('T')[0] 
-        })
-        .in('id', successfulContactIds);
+    setEmailSending(true);
 
-      if (dbError) {
-        console.error('Error updating database:', dbError);
-      }
+    try {
+      // Get selected contacts data
+      const selectedContactsData = contacts.filter(contact => 
+        selectedContactIds.includes(contact.id)
+      );
 
-      // Update local state
-      setContacts(prev => prev.map(contact => 
-        successfulContactIds.includes(contact.id)
-          ? { ...contact, status: 'email_sent', last_contacted: new Date().toISOString().split('T')[0] }
-          : contact
-      ));
-    }
-
-    // Clear selections and close composer
-    setSelectedContacts(new Set());
-    setShowEmailComposer(false);
-
-    // Refresh email stats (you can add an endpoint for this)
-    await fetchEmailStats();
-
-    // Show detailed results
-    showEmailResults(result.data);
-    
-  } catch (error) {
-    console.error('Error in sendBulkEmail:', error);
-    
-    let errorMessage = 'An error occurred while sending emails.';
-    
-    if (error instanceof Error) {
-      if (error.message.includes('Not authenticated')) {
-        errorMessage = 'Please log in again to send emails.';
-      } else if (error.message.includes('quota')) {
-        errorMessage = 'Daily email quota exceeded. Please try again tomorrow.';
-      } else if (error.message.includes('Network') || error.message.includes('fetch')) {
-        errorMessage = 'Network error. Please check your connection and try again.';
-      } else {
-        errorMessage = `Error: ${error.message}`;
-      }
-    }
-    
-    alert(errorMessage);
-  } finally {
-    setEmailSending(false);
-  }
-};
-
-/**
- * Fetch email stats from your backend
- * You can create another Edge Function or store this in Supabase
- */
-const fetchEmailStats = async () => {
-  try {
-    // Option 1: Call an Edge Function that queries Apps Script
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    if (!session) return;
-
-    const { data, error } = await supabase.functions.invoke('get-email-stats', {
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-      },
-    });
-
-    if (!error && data) {
-      setEmailStats(data);
-    }
-
-    // Option 2: Store quota in Supabase and query it
-    // const { data, error } = await supabase
-    //   .from('email_quota')
-    //   .select('*')
-    //   .eq('user_id', session.user.id)
-    //   .single();
-    
-  } catch (error) {
-    console.error('Error fetching email stats:', error);
-  }
-};
-
-      // Send to Apps Script backend
-      const response = await fetch(APPS_SCRIPT_CONFIG.WEB_APP_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      // Prepare data for Supabase Edge Function
+      const emailData = {
+        contacts: selectedContactsData.map(contact => ({
+          id: contact.id,
+          name: contact.name,
+          email: contact.email,
+          company: contact.company || '',
+          phone: contact.phone || '',
+          position: contact.position || '',
+        })),
+        subject: emailComposer.subject,
+        body: emailComposer.body,
+        options: {
+          bcc: false,
+          trackOpens: false,
+          fromName: 'Autoflow Studio',
+          fromEmail: null,
         },
-        body: JSON.stringify(emailData),
-        signal: AbortSignal.timeout(APPS_SCRIPT_CONFIG.TIMEOUT)
+      };
+
+      console.log('Sending email data to Supabase Edge Function');
+
+      // Get Supabase session for authentication
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !session) {
+        throw new Error('Not authenticated. Please log in again.');
+      }
+
+      // Call Supabase Edge Function
+      const { data: result, error: functionError } = await supabase.functions.invoke('send-emails', {
+        body: emailData,
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (functionError) {
+        console.error('Edge Function error:', functionError);
+        throw new Error(functionError.message || 'Failed to send emails');
       }
 
-      const result = await response.json();
-      console.log('Apps Script response:', result);
+      console.log('Edge Function response:', result);
 
-      if (result.error) {
-        throw new Error(result.error);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to send emails');
       }
 
       // Update contact statuses in database
-      const successfulContactIds = result.successful.map(s => s.contactId);
+      const successfulContactIds = result.data.successful.map((s) => s.contactId);
       
       if (successfulContactIds.length > 0) {
         const { error: dbError } = await supabase
@@ -702,18 +593,23 @@ const fetchEmailStats = async () => {
       await fetchEmailStats();
 
       // Show detailed results
-      showEmailResults(result);
+      showEmailResults(result.data);
       
     } catch (error) {
       console.error('Error in sendBulkEmail:', error);
       
       let errorMessage = 'An error occurred while sending emails.';
-      if (error.name === 'AbortError') {
-        errorMessage = 'Email sending timed out. Please try again with fewer contacts.';
-      } else if (error.message.includes('quota')) {
-        errorMessage = 'Daily email quota exceeded. Please try again tomorrow.';
-      } else {
-        errorMessage = `Error: ${error.message}`;
+      
+      if (error instanceof Error) {
+        if (error.message.includes('Not authenticated')) {
+          errorMessage = 'Please log in again to send emails.';
+        } else if (error.message.includes('quota')) {
+          errorMessage = 'Daily email quota exceeded. Please try again tomorrow.';
+        } else if (error.message.includes('Network') || error.message.includes('fetch')) {
+          errorMessage = 'Network error. Please check your connection and try again.';
+        } else {
+          errorMessage = `Error: ${error.message}`;
+        }
       }
       
       alert(errorMessage);
@@ -1044,8 +940,6 @@ const fetchEmailStats = async () => {
           </div>
         </div>
 
-        {/* Rest of your existing JSX remains the same until the Email Composer Modal */}
-
         {/* Tabs */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
           <div className="flex border-b border-gray-200">
@@ -1245,8 +1139,6 @@ const fetchEmailStats = async () => {
             </div>
           </div>
         )}
-
-        {/* All existing modals remain the same until Email Composer Modal */}
 
         {/* Add Contact Modal */}
         {showNewContactForm && (
@@ -1578,7 +1470,7 @@ const fetchEmailStats = async () => {
           </div>
         )}
 
-        {/* Enhanced Email Composer Modal */}
+        {/* Email Composer Modal */}
         {showEmailComposer && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
@@ -1679,7 +1571,7 @@ const fetchEmailStats = async () => {
           </div>
         )}
 
-        {/* Import CSV Modal remains the same */}
+        {/* Import CSV Modal */}
         {showImportModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[80vh] overflow-y-auto">
