@@ -470,53 +470,184 @@ const OutreachSystem = () => {
     });
   };
 
-  // Enhanced sendBulkEmail function with Apps Script integration
-  const sendBulkEmail = async () => {
-    const selectedContactIds = Array.from(selectedContacts);
-    console.log('Sending emails to:', selectedContactIds);
+ // Updated email sending function for your React component
+// Replace the existing sendBulkEmail function with this version
+
+/**
+ * Send bulk emails via Supabase Edge Function
+ * This calls Supabase, which then calls Google Apps Script
+ */
+const sendBulkEmail = async () => {
+  const selectedContactIds = Array.from(selectedContacts);
+  console.log('Sending emails to:', selectedContactIds);
+  
+  if (selectedContactIds.length === 0) {
+    alert('Please select at least one contact to send emails to.');
+    return;
+  }
+
+  if (!emailComposer.subject.trim() || !emailComposer.body.trim()) {
+    alert('Please fill in both subject and body fields.');
+    return;
+  }
+
+  // Check daily quota (if you have quota data from backend)
+  if (emailStats.dailyQuotaRemaining < selectedContactIds.length) {
+    const proceed = confirm(
+      `Warning: You only have ${emailStats.dailyQuotaRemaining} emails remaining in your daily quota. ` +
+      `You're trying to send ${selectedContactIds.length} emails. Continue anyway?`
+    );
+    if (!proceed) return;
+  }
+
+  setEmailSending(true);
+
+  try {
+    // Get selected contacts data
+    const selectedContactsData = contacts.filter(contact => 
+      selectedContactIds.includes(contact.id)
+    );
+
+    // Prepare data for Supabase Edge Function
+    const emailData = {
+      contacts: selectedContactsData.map(contact => ({
+        id: contact.id,
+        name: contact.name,
+        email: contact.email,
+        company: contact.company || '',
+        phone: contact.phone || '',
+        position: contact.position || '',
+      })),
+      subject: emailComposer.subject,
+      body: emailComposer.body,
+      options: {
+        bcc: false, // Set to your email if you want to BCC yourself
+        trackOpens: false,
+        fromName: 'Autoflow Studio', // Customize this
+        fromEmail: null, // Set if you want a specific reply-to
+      },
+    };
+
+    console.log('Sending email data to Supabase Edge Function:', {
+      contactCount: emailData.contacts.length,
+      subject: emailData.subject,
+    });
+
+    // Get Supabase session for authentication
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
     
-    if (selectedContactIds.length === 0) {
-      alert('Please select at least one contact to send emails to.');
-      return;
+    if (sessionError || !session) {
+      throw new Error('Not authenticated. Please log in again.');
     }
 
-    if (!emailComposer.subject.trim() || !emailComposer.body.trim()) {
-      alert('Please fill in both subject and body fields.');
-      return;
+    // Call Supabase Edge Function
+    const { data: result, error: functionError } = await supabase.functions.invoke('send-emails', {
+      body: emailData,
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    });
+
+    if (functionError) {
+      console.error('Edge Function error:', functionError);
+      throw new Error(functionError.message || 'Failed to send emails');
     }
 
-    // Check daily quota
-    if (emailStats.dailyQuotaRemaining < selectedContactIds.length) {
-      const proceed = confirm(
-        `Warning: You only have ${emailStats.dailyQuotaRemaining} emails remaining in your daily quota. ` +
-        `You're trying to send ${selectedContactIds.length} emails. Continue anyway?`
-      );
-      if (!proceed) return;
+    console.log('Edge Function response:', result);
+
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to send emails');
     }
 
-    setEmailSending(true);
+    // Update contact statuses in database
+    const successfulContactIds = result.data.successful.map((s: any) => s.contactId);
+    
+    if (successfulContactIds.length > 0) {
+      const { error: dbError } = await supabase
+        .from('contacts')
+        .update({ 
+          status: 'email_sent', 
+          last_contacted: new Date().toISOString().split('T')[0] 
+        })
+        .in('id', successfulContactIds);
 
-    try {
-      // Get selected contacts data
-      const selectedContactsData = contacts.filter(contact => 
-        selectedContactIds.includes(contact.id)
-      );
+      if (dbError) {
+        console.error('Error updating database:', dbError);
+      }
 
-      // Prepare data for Apps Script
-      const emailData = {
-        contacts: selectedContactsData.map(contact => ({
-          id: contact.id,
-          name: contact.name,
-          email: contact.email,
-          company: contact.company || '',
-        })),
-        subject: emailComposer.subject,
-        body: emailComposer.body,
-        bcc: false, // Set to true if you want to BCC yourself
-        trackOpens: false, // Set to true if you want to track email opens
-      };
+      // Update local state
+      setContacts(prev => prev.map(contact => 
+        successfulContactIds.includes(contact.id)
+          ? { ...contact, status: 'email_sent', last_contacted: new Date().toISOString().split('T')[0] }
+          : contact
+      ));
+    }
 
-      console.log('Sending email data to Apps Script:', emailData);
+    // Clear selections and close composer
+    setSelectedContacts(new Set());
+    setShowEmailComposer(false);
+
+    // Refresh email stats (you can add an endpoint for this)
+    await fetchEmailStats();
+
+    // Show detailed results
+    showEmailResults(result.data);
+    
+  } catch (error) {
+    console.error('Error in sendBulkEmail:', error);
+    
+    let errorMessage = 'An error occurred while sending emails.';
+    
+    if (error instanceof Error) {
+      if (error.message.includes('Not authenticated')) {
+        errorMessage = 'Please log in again to send emails.';
+      } else if (error.message.includes('quota')) {
+        errorMessage = 'Daily email quota exceeded. Please try again tomorrow.';
+      } else if (error.message.includes('Network') || error.message.includes('fetch')) {
+        errorMessage = 'Network error. Please check your connection and try again.';
+      } else {
+        errorMessage = `Error: ${error.message}`;
+      }
+    }
+    
+    alert(errorMessage);
+  } finally {
+    setEmailSending(false);
+  }
+};
+
+/**
+ * Fetch email stats from your backend
+ * You can create another Edge Function or store this in Supabase
+ */
+const fetchEmailStats = async () => {
+  try {
+    // Option 1: Call an Edge Function that queries Apps Script
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) return;
+
+    const { data, error } = await supabase.functions.invoke('get-email-stats', {
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    });
+
+    if (!error && data) {
+      setEmailStats(data);
+    }
+
+    // Option 2: Store quota in Supabase and query it
+    // const { data, error } = await supabase
+    //   .from('email_quota')
+    //   .select('*')
+    //   .eq('user_id', session.user.id)
+    //   .single();
+    
+  } catch (error) {
+    console.error('Error fetching email stats:', error);
+  }
+};
 
       // Send to Apps Script backend
       const response = await fetch(APPS_SCRIPT_CONFIG.WEB_APP_URL, {
