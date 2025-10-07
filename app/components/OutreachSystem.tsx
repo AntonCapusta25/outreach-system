@@ -480,143 +480,144 @@ const OutreachSystem = () => {
     });
   };
 
-  /**
-   * Send bulk emails via Supabase Edge Function
-   */
-  const sendBulkEmail = async () => {
-    const selectedContactIds = Array.from(selectedContacts);
-    console.log('Sending emails to:', selectedContactIds);
+// 📧 Fixed sendBulkEmail Function with Proper Authentication
+// Replace your current sendBulkEmail function with this version
+
+const sendBulkEmail = async () => {
+  // Validation checks
+  if (!selectedTemplate) {
+    alert('Please select an email template.');
+    return;
+  }
+
+  if (selectedContactIds.length === 0) {
+    alert('Please select at least one contact.');
+    return;
+  }
+
+  // Check authentication BEFORE doing anything else
+  const { data: { session }, error: authError } = await supabase.auth.getSession();
+  
+  if (authError || !session) {
+    alert('You must be signed in to send emails. Please log in and try again.');
+    console.error('Authentication error:', authError || 'No session found');
+    return;
+  }
+
+  console.log('✅ User authenticated:', session.user.email);
+
+  // Get contacts to send to
+  const contactsToSend = contacts.filter(c => selectedContactIds.includes(c.id));
+  
+  if (contactsToSend.length === 0) {
+    alert('No valid contacts selected.');
+    return;
+  }
+
+  // Confirm before sending
+  const confirmMessage = `Send email to ${contactsToSend.length} contact(s)?\n\n` +
+    `Template: ${selectedTemplate.name}\n` +
+    `Subject: ${selectedTemplate.subject}`;
+  
+  if (!confirm(confirmMessage)) {
+    return;
+  }
+
+  // Start sending process
+  setEmailSending(true);
+  
+  try {
+    console.log('Selected contacts:', selectedContactIds);
+    console.log('Sending emails to:', contactsToSend.map(c => c.id));
+    console.log('Sending email data to Supabase Edge Function');
+
+    // Prepare email data
+    const emailData = {
+      contacts: contactsToSend.map(contact => ({
+        id: contact.id,
+        email: contact.email,
+        name: contact.name,
+        company: contact.company || '',
+        title: contact.title || '',
+      })),
+      template: {
+        subject: selectedTemplate.subject,
+        body: selectedTemplate.body,
+      },
+      campaignId: selectedCampaignId || null,
+    };
+
+    console.log('Prepared email data:', emailData);
+
+    // Call Supabase Edge Function with authentication
+    const { data, error } = await supabase.functions.invoke('send-outreach-emails', {
+      body: emailData,
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+      }
+    });
+
+    console.log('Edge Function response:', { data, error });
+
+    if (error) {
+      console.error('Edge Function error:', error);
+      throw new Error(error.message || 'Failed to send emails via Edge Function');
+    }
+
+    if (!data || !data.success) {
+      throw new Error(data?.error || 'Unknown error occurred');
+    }
+
+    // Success!
+    const { sent, failed, results } = data;
     
-    if (selectedContactIds.length === 0) {
-      alert('Please select at least one contact to send emails to.');
-      return;
-    }
-
-    if (!emailComposer.subject.trim() || !emailComposer.body.trim()) {
-      alert('Please fill in both subject and body fields.');
-      return;
-    }
-
-    if (emailStats.dailyQuotaRemaining < selectedContactIds.length) {
-      const proceed = confirm(
-        `Warning: You only have ${emailStats.dailyQuotaRemaining} emails remaining in your daily quota. ` +
-        `You're trying to send ${selectedContactIds.length} emails. Continue anyway?`
+    console.log(`✅ Emails sent successfully: ${sent} sent, ${failed} failed`);
+    
+    if (failed > 0) {
+      const failedContacts = results
+        .filter(r => !r.success)
+        .map(r => r.email)
+        .join(', ');
+      
+      alert(
+        `Emails sent with some failures:\n\n` +
+        `✅ Successful: ${sent}\n` +
+        `❌ Failed: ${failed}\n\n` +
+        `Failed contacts: ${failedContacts}`
       );
-      if (!proceed) return;
+    } else {
+      alert(`✅ Successfully sent ${sent} email(s)!`);
     }
 
-    setEmailSending(true);
+    // Clear selection and refresh
+    setSelectedContactIds([]);
+    await fetchContacts();
+    await fetchEmailStats();
 
-    try {
-      // Get selected contacts data
-      const selectedContactsData = contacts.filter(contact => 
-        selectedContactIds.includes(contact.id)
-      );
-
-      // Prepare data for Supabase Edge Function
-      const emailData = {
-        contacts: selectedContactsData.map(contact => ({
-          id: contact.id,
-          name: contact.name,
-          email: contact.email,
-          company: contact.company || '',
-          phone: contact.phone || '',
-          position: contact.position || '',
-        })),
-        subject: emailComposer.subject,
-        body: emailComposer.body,
-        options: {
-          bcc: false,
-          trackOpens: false,
-          fromName: 'Autoflow Studio',
-          fromEmail: null,
-        },
-      };
-
-      console.log('Sending email data to Supabase Edge Function');
-
-      // Get Supabase session for authentication
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      
-      if (sessionError || !session) {
-        throw new Error('Not authenticated. Please log in again.');
-      }
-
-      // Call Supabase Edge Function
-      const { data: result, error: functionError } = await supabase.functions.invoke('send-emails', {
-        body: emailData,
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-
-      if (functionError) {
-        console.error('Edge Function error:', functionError);
-        throw new Error(functionError.message || 'Failed to send emails');
-      }
-
-      console.log('Edge Function response:', result);
-
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to send emails');
-      }
-
-      // Update contact statuses in database
-      const successfulContactIds = result.data.successful.map((s) => s.contactId);
-      
-      if (successfulContactIds.length > 0) {
-        const { error: dbError } = await supabase
-          .from('contacts')
-          .update({ 
-            status: 'email_sent', 
-            last_contacted: new Date().toISOString().split('T')[0] 
-          })
-          .in('id', successfulContactIds);
-
-        if (dbError) {
-          console.error('Error updating database:', dbError);
-        }
-
-        // Update local state
-        setContacts(prev => prev.map(contact => 
-          successfulContactIds.includes(contact.id)
-            ? { ...contact, status: 'email_sent', last_contacted: new Date().toISOString().split('T')[0] }
-            : contact
-        ));
-      }
-
-      // Clear selections and close composer
-      setSelectedContacts(new Set());
-      setShowEmailComposer(false);
-
-      // Refresh email stats
-      await fetchEmailStats();
-
-      // Show detailed results
-      showEmailResults(result.data);
-      
-    } catch (error) {
-      console.error('Error in sendBulkEmail:', error);
-      
-      let errorMessage = 'An error occurred while sending emails.';
-      
-      if (error instanceof Error) {
-        if (error.message.includes('Not authenticated')) {
-          errorMessage = 'Please log in again to send emails.';
-        } else if (error.message.includes('quota')) {
-          errorMessage = 'Daily email quota exceeded. Please try again tomorrow.';
-        } else if (error.message.includes('Network') || error.message.includes('fetch')) {
-          errorMessage = 'Network error. Please check your connection and try again.';
-        } else {
-          errorMessage = `Error: ${error.message}`;
-        }
-      }
-      
-      alert(errorMessage);
-    } finally {
-      setEmailSending(false);
+  } catch (error) {
+    console.error('Error in sendBulkEmail:', error);
+    
+    let errorMessage = 'An error occurred while sending emails.';
+    
+    if (error.message) {
+      errorMessage = error.message;
     }
-  };
+    
+    // Show specific error messages
+    if (errorMessage.includes('not authenticated')) {
+      errorMessage = '🔐 Authentication error. Please sign in and try again.';
+    } else if (errorMessage.includes('quota')) {
+      errorMessage = '⚠️ Daily email quota exceeded. Please try again tomorrow.';
+    } else if (errorMessage.includes('Edge Function')) {
+      errorMessage = '⚠️ Email service error. Please check your Supabase Edge Function deployment.';
+    }
+    
+    alert(errorMessage);
+  } finally {
+    setEmailSending(false);
+  }
+};
 
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
