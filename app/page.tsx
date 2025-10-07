@@ -1,7 +1,10 @@
-'use client';
-
-import OutreachSystem from './components/OutreachSystem'
+import OutreachSystem from './components/OutreachSystem';
+import SimpleAuth from './components/SimpleAuth';
 
 export default function Home() {
-  return <OutreachSystem />
+  return (
+    <SimpleAuth>
+      <OutreachSystem />
+    </SimpleAuth>
+  );
 }
