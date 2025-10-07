@@ -1,5 +1,6 @@
 'use client';
-
+import OutreachSystem from './components/OutreachSystem';
+import SimpleAuth from './components/SimpleAuth';
 import React, { useState, useEffect } from 'react';
 import { Users, Mail, Send, Plus, Edit, Trash2, UserCheck, UserX, Clock, FileText, Wand2, Globe, Upload, Download } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
@@ -1722,4 +1723,10 @@ const sendBulkEmail = async () => {
   );
 };
 
-export default OutreachSystem;
+export default function Home() {
+  return (
+    <SimpleAuth>
+      <OutreachSystem />
+    </SimpleAuth>
+  );
+}
