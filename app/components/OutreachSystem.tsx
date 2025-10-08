@@ -556,7 +556,7 @@ const sendBulkEmail = async () => {
 // 🧠 Make sure `supabase` is your initialized Supabase client
 // (e.g. const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY))
 
-async function sendBulkEmail(emailData) {
+const sendBulkEmail = async (emailData) => {
   try {
     // ✅ Always get the latest active session before making a request
     const {
