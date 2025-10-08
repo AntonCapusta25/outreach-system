@@ -553,47 +553,76 @@ const sendBulkEmail = async () => {
     };
 
     console.log('Prepared email data:', emailData);
+// 🧠 Make sure `supabase` is your initialized Supabase client
+// (e.g. const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY))
 
-    // Call Supabase Edge Function with authentication
-    const { data, error } = await supabase.functions.invoke('send-emails', {
+async function sendBulkEmail(emailData) {
+  try {
+    // ✅ Always get the latest active session before making a request
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
+
+    if (sessionError) {
+      console.error("Error getting session:", sessionError);
+      throw new Error("Authentication failed — could not get session.");
+    }
+
+    if (!session) {
+      console.error("❌ No active session found");
+      throw new Error("You must be logged in to send emails.");
+    }
+
+    console.log("🔑 Using access token:", session.access_token?.slice(0, 10) + "...");
+
+    // ✅ Call Supabase Edge Function with the correct Authorization header
+    const { data, error } = await supabase.functions.invoke("send-emails", {
       body: emailData,
       headers: {
         Authorization: `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-      }
+        "Content-Type": "application/json",
+      },
     });
 
-    console.log('Edge Function response:', { data, error });
+    console.log("📦 Edge Function response:", { data, error });
 
+    // 🧩 Handle Supabase function invocation errors
     if (error) {
-      console.error('Edge Function error:', error);
-      throw new Error(error.message || 'Failed to send emails via Edge Function');
+      console.error("Edge Function error:", error);
+      throw new Error(error.message || "Failed to send emails via Edge Function");
     }
 
+    // 🧩 Handle bad data or backend-side validation failures
     if (!data || !data.success) {
-      throw new Error(data?.error || 'Unknown error occurred');
+      throw new Error(data?.error || "Unknown error occurred while sending emails");
     }
 
-    // Success!
+    // ✅ Success logging
     const { sent, failed, results } = data;
-    
     console.log(`✅ Emails sent successfully: ${sent} sent, ${failed} failed`);
-    
+
+    // 🧩 User feedback
     if (failed > 0) {
       const failedContacts = results
-        .filter(r => !r.success)
-        .map(r => r.email)
-        .join(', ');
-      
+        .filter((r) => !r.success)
+        .map((r) => r.email)
+        .join(", ");
+
       alert(
         `Emails sent with some failures:\n\n` +
-        `✅ Successful: ${sent}\n` +
-        `❌ Failed: ${failed}\n\n` +
-        `Failed contacts: ${failedContacts}`
+          `✅ Successful: ${sent}\n` +
+          `❌ Failed: ${failed}\n\n` +
+          `Failed contacts: ${failedContacts}`
       );
     } else {
       alert(`✅ Successfully sent ${sent} email(s)!`);
     }
+  } catch (err) {
+    console.error("💥 Error in sendBulkEmail:", err);
+    alert(`❌ Failed to send emails: ${err.message}`);
+  }
+}
 
     // Clear selection and close modal
     setSelectedContacts(new Set());
