@@ -555,7 +555,7 @@ const sendBulkEmail = async () => {
     console.log('Prepared email data:', emailData);
 
     // Call Supabase Edge Function with authentication
-    const { data, error } = await supabase.functions.invoke('send-outreach-emails', {
+    const { data, error } = await supabase.functions.invoke('send-emails', {
       body: emailData,
       headers: {
         Authorization: `Bearer ${session.access_token}`,
